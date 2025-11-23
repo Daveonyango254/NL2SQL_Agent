@@ -1,0 +1,90 @@
+# NL2SQL_AGENT Configuration File
+# This file controls model selection and retry behavior
+
+## Model Configuration
+## primary_model_type: "openai" or "ollama"
+# primary_model_type: "openai"  # Default to OpenAI models
+primary_model_type: "ollama" # Changed to use Colab Ollama server
+
+# OpenAI Configuration
+openai:
+  # Model for SQLGenerator (primary)
+  sql_generator_model: "gpt-4o"
+  # Model for QueryDecomposer
+  query_decomposer_model: "gpt-4o"
+  # Fallback model (used after first retry)
+  fallback_model: "gpt-4o"  # Change to "gpt-4.5-turbo" when gpt-5 is available
+  temperature: 0
+  # Optional: specify API key here or use environment variable OPENAI_API_KEY
+  # api_key: "your-api-key-here"
+
+# Ollama Configuration (for local fine-tuned models)
+ollama:
+  # Base URL for Ollama API
+  # - Local: "http://localhost:11434"
+  # - Colab (ngrok): "https://your-ngrok-url.ngrok.io" (from ollama_server_colab.ipynb)
+  # base_url: "http://localhost:11434"
+  base_url: "https://my-cesma.ngrok.io"
+
+  # Model for SQLGenerator (your fine-tuned model)
+  # sql_generator_model: "sql-nl2sql"  # Local model
+  sql_generator_model: "llama3.1:8b" # colab model i.e cesma-sql-llama-8b or cesma-sql-qwen3-8b or cesma-sql-llama-3b or hf.co/mradermacher/SLM-SQL-0.5B-GGUF:Q4_K_M
+
+  # Model for QueryDecomposer
+  # query_decomposer_model: "mistral:7b"  # Local model
+  query_decomposer_model: "mistral:7b"  # Local model i.e. qwen3 or mistral:7b or llama-3.1-7b or hf.co/mradermacher/SLM-SQL-0.5B-GGUF:Q4_K_M
+
+  # Model for Formatter (result explanation)
+  formatter_model: "llama3.1:8b"  # Same as sql_generator for SQL_Agent.py
+
+  # Fallback model (still uses OpenAI)
+  fallback_to_openai: true  # Set to true to use OpenAI fallback
+  fallback_model: "gpt-4o"  # OpenAI model for fallback
+  temperature: 0
+
+  # ===============================================================================
+  # SETUP GUIDE FOR FINE-TUNED CESMA SQL 13B MODEL
+  # ===============================================================================
+  #
+  # After completing fine-tuning in finetuning/cesma_finetune_13b_optimized.ipynb:
+  #
+  # Option A: Local Deployment
+  # --------------------------
+  # 1. Export GGUF model from training notebook
+  # 2. Copy cesma_sql_13b.Q4_K_M.gguf to finetuning/ directory
+  # 3. Create Ollama model:
+  #    cd finetuning
+  #    ollama create cesma-sql-13b -f Modelfile_13B_optimized
+  # 4. Update this config:
+  #    base_url: "http://localhost:11434"
+  #    sql_generator_model: "cesma-sql-13b"
+  #    query_decomposer_model: "cesma-sql-13b"
+  #
+  # Option B: Colab GPU Deployment (FREE)
+  # --------------------------------------
+  # 1. Open finetuning/ollama_server_colab.ipynb in Colab
+  # 2. Follow notebook to start Ollama server with ngrok tunnel
+  # 3. Copy the ngrok public URL (e.g., https://abc123.ngrok.io)
+  # 4. Update this config:
+  #    base_url: "https://your-ngrok-url.ngrok.io"
+  #    sql_generator_model: "cesma-sql-13b"
+  #    query_decomposer_model: "cesma-sql-13b"
+  #
+  # Option C: Download from Hugging Face
+  # -------------------------------------
+  # If you uploaded to HuggingFace during training:
+  # 1. Download GGUF: huggingface-cli download your-username/cesma-sql-llama-3.1-13b
+  # 2. Follow Option A steps above
+  #
+  # ===============================================================================
+
+# Retry Configuration
+retry:
+  max_retries: 3  # Maximum number of SQL generation attempts
+  fallback_after_retry: 1  # Switch to fallback model after this many retries
+
+# Feature Flags
+features:
+  enable_debug_output: true  # Print debug messages during execution
+  log_queries: true  # Log all generated queries
+  log_file: "sql_agent_logs.txt"
