@@ -2,6 +2,10 @@
 
 A modular, configurable SQL generation system using LangGraph for natural language to SQL translation. Supports both cloud-based LLMs (OpenAI) and local Small Language Models (SLMs) via Ollama.
 
+## Data
+
+Download Link to be added
+
 ## Features
 
 - **Configurable Model Backend**: Switch between OpenAI GPT-4o and local Ollama models via `config.yaml`
