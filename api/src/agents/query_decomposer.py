@@ -35,21 +35,10 @@ class QueryDecomposer:
         """
         chain = self.decompose_prompt | self.llm
 
-        # Extract foreign key relationships from JSON schema
-        foreign_keys = []
-        json_schema = schema.get("json_schema", {})
-        if json_schema and "foreign_key_relationships" in json_schema:
-            for fk in json_schema["foreign_key_relationships"]:
-                fk_str = f"{fk['from_table']}.{fk['from_column']} -> {fk['to_table']}.{fk['to_column']}"
-                foreign_keys.append(fk_str)
-
-        foreign_keys_str = "\n".join(foreign_keys) if foreign_keys else "No foreign key relationships available"
-
         response = chain.invoke({
             "query": query,
             "direct_schema": str(schema.get("direct_schema", {})),
-            "rag_context": str(schema.get("rag_context", {})),
-            "foreign_keys": foreign_keys_str
+            "rag_context": str(schema.get("rag_context", {}))
         })
 
         content = response.content if hasattr(
