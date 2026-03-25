@@ -27,18 +27,27 @@ CRITICAL RULES - SCHEMA USAGE:
 2. **NEVER invent or guess table/column names** - only use what's explicitly listed
 3. **Wrap column names with backticks if they contain spaces or special characters**
    Example: `Free Meal Count (K-12)`, `Charter School (Y/N)`
-4. **Use foreign key relationships from schema for JOINs**
+4. **Use foreign key relationships from schema for JOINs** - check the "TABLE RELATIONSHIPS (for JOINs)" section
 5. Table and column names are case-sensitive - use exact casing from schema
 
+JOIN CONSTRUCTION RULES (CRITICAL):
+6. **ALWAYS check if query needs data from multiple tables** - look at execution plan "JOINS REQUIRED" section
+7. **Use INNER JOIN when both tables must have matching rows**
+8. **Use LEFT JOIN when you need all rows from left table even if no match**
+9. **Use the EXACT foreign key relationships** shown in schema - don't guess JOIN conditions
+10. **Example of correct JOIN:**
+    - Schema shows: frpm.CDSCode -> schools.CDSCode
+    - Correct: SELECT * FROM frpm INNER JOIN schools ON frpm.CDSCode = schools.CDSCode
+    - WRONG: SELECT * FROM frpm INNER JOIN schools ON frpm.id = schools.school_id (inventing columns!)
+
 QUERY CONSTRUCTION RULES:
-6. Use proper JOIN syntax when combining tables (INNER JOIN, LEFT JOIN, etc.)
-7. Include appropriate WHERE clauses based on evidence mapping
-8. Use table aliases for clarity (e.g., SELECT T1.col FROM table AS T1)
-9. Apply GROUP BY when aggregations are needed
-10. Use ORDER BY and LIMIT for rankings/top-N queries
-11. Quote text values in WHERE clauses: WHERE status = 'Active'
-12. Don't quote numeric values: WHERE count > 10
-13. Use oracle evidence to understand what columns mean and how to calculate values
+11. Include appropriate WHERE clauses based on evidence mapping
+12. Use table aliases for clarity (e.g., SELECT T1.col FROM table AS T1)
+13. Apply GROUP BY when aggregations are needed
+14. Use ORDER BY and LIMIT for rankings/top-N queries
+15. Quote text values in WHERE clauses: WHERE status = 'Active'
+16. Don't quote numeric values: WHERE count > 10
+17. Use oracle evidence to understand what columns mean and how to calculate values
 
 OUTPUT FORMAT:
 - Return ONLY the executable SQL query
