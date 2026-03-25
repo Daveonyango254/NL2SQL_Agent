@@ -9,6 +9,7 @@ import argparse
 import multiprocessing as mp
 from pathlib import Path
 from func_timeout import func_timeout, FunctionTimedOut
+import time
 
 from evaluation.evaluation_utils import (
     load_jsonl,
@@ -17,7 +18,8 @@ from evaluation.evaluation_utils import (
     sort_results,
     print_data,
 )
-from evaluation.config import OUTPUT_DIR
+from evaluation.config import OUTPUT_DIR, DEFAULT_QUERY_TIMEOUT
+from evaluation.latency_tracker import LatencyTracker
 
 # Global result collector
 exec_result = []
@@ -49,7 +51,7 @@ def execute_model(
     predicted_sql, ground_truth, db_place, idx, meta_time_out, sql_dialect
 ):
     """
-    Execute a single SQL query pair with timeout
+    Execute a single SQL query pair with timeout and latency tracking
 
     Args:
         predicted_sql: Predicted SQL query
@@ -60,8 +62,13 @@ def execute_model(
         sql_dialect: SQL dialect
 
     Returns:
-        Dictionary with sql_idx and result
+        Dictionary with sql_idx, result, latency_ms, is_timeout, and success
     """
+    start_time = time.time()
+    is_timeout = False
+    success = True
+    error_msg = None
+
     try:
         res = func_timeout(
             meta_time_out,
@@ -73,11 +80,25 @@ def execute_model(
     except FunctionTimedOut:
         result = [(f"timeout",)]
         res = 0
+        is_timeout = True
+        success = False
+        error_msg = f"Query timeout after {meta_time_out}s"
     except Exception as e:
         result = [(f"error",)]
         res = 0
+        success = False
+        error_msg = str(e)
 
-    result = {"sql_idx": idx, "res": res}
+    latency_ms = (time.time() - start_time) * 1000
+
+    result = {
+        "sql_idx": idx,
+        "res": res,
+        "latency_ms": latency_ms,
+        "is_timeout": is_timeout,
+        "success": success,
+        "error_msg": error_msg
+    }
     return result
 
 
@@ -113,13 +134,14 @@ def run_sqls_parallel(
     pool.join()
 
 
-def compute_acc_by_diff(exec_results, diff_json_path):
+def compute_acc_by_diff(exec_results, diff_json_path, question_ids=None):
     """
     Compute accuracy broken down by difficulty level
 
     Args:
         exec_results: List of execution results
         diff_json_path: Path to difficulty labels file
+        question_ids: Optional question_id list aligned with exec_results order
 
     Returns:
         Tuple of (simple_acc, moderate_acc, challenging_acc, overall_acc, count_lists)
@@ -129,9 +151,19 @@ def compute_acc_by_diff(exec_results, diff_json_path):
     contents = load_jsonl(diff_json_path)
     simple_results, moderate_results, challenging_results = [], [], []
 
-    # Only iterate through the number of results we have
-    for i in range(min(len(exec_results), len(contents))):
-        content = contents[i]
+    qid_to_diff = {item.get("question_id"): item.get("difficulty") for item in contents}
+
+    # Iterate in execution order and use question_id mapping when available.
+    for i in range(len(exec_results)):
+        content = None
+        if question_ids and i < len(question_ids):
+            difficulty = qid_to_diff.get(question_ids[i])
+            if difficulty is not None:
+                content = {"difficulty": difficulty}
+        if content is None and i < len(contents):
+            content = contents[i]
+        if content is None:
+            continue
 
         if content["difficulty"] == "simple":
             simple_results.append(exec_results[i])
@@ -186,7 +218,7 @@ def run_ex_evaluation(
         output_log_path: Path to save results in output directory
 
     Returns:
-        Dictionary with evaluation results
+        Dictionary with evaluation results including latency statistics
     """
     # Ensure output directory exists
     if output_log_path is None:
@@ -196,6 +228,9 @@ def run_ex_evaluation(
 
     # Clear previous results
     exec_result.clear()
+
+    # Initialize latency tracker
+    latency_tracker = LatencyTracker()
 
     # Load predicted and ground truth SQLs
     # First load predictions to get the question_ids in sorted order
@@ -235,8 +270,18 @@ def run_ex_evaluation(
     # Sort and compute metrics
     sorted_results = sort_results(exec_result)
 
+    # Record latencies from results
+    for result in sorted_results:
+        latency_tracker.record(
+            query_id=result.get("sql_idx", 0),
+            latency_ms=result.get("latency_ms", 0.0),
+            is_timeout=result.get("is_timeout", False),
+            success=result.get("success", True),
+            error_msg=result.get("error_msg", None)
+        )
+
     simple_acc, moderate_acc, challenging_acc, overall_acc, count_lists = compute_acc_by_diff(
-        sorted_results, diff_json_path
+        sorted_results, diff_json_path, question_ids_in_order
     )
 
     score_lists = [simple_acc, moderate_acc, challenging_acc, overall_acc]
@@ -248,6 +293,14 @@ def run_ex_evaluation(
         metric="EX",
         result_log_file=str(output_log_path)
     )
+
+    # Save and display latency statistics
+    latency_file = output_log_path.parent / f"{output_log_path.stem}_latency.json"
+    latency_tracker.save_to_file(latency_file)
+    print(f"\n[EX] Latency stats saved to: {latency_file}")
+
+    # Print latency summary
+    latency_tracker.print_summary()
 
     # Return structured results
     return {
@@ -261,7 +314,8 @@ def run_ex_evaluation(
             "challenging": count_lists[2],
             "total": count_lists[3]
         },
-        "output_file": str(output_log_path)
+        "output_file": str(output_log_path),
+        "latency_stats": latency_tracker.get_summary()
     }
 
 
@@ -273,7 +327,7 @@ if __name__ == "__main__":
     args_parser.add_argument("--ground_truth_path", type=str, required=True, default="")
     args_parser.add_argument("--db_root_path", type=str, required=True, default="")
     args_parser.add_argument("--num_cpus", type=int, default=1)
-    args_parser.add_argument("--meta_time_out", type=float, default=30.0)
+    args_parser.add_argument("--meta_time_out", type=float, default=DEFAULT_QUERY_TIMEOUT)
     args_parser.add_argument("--diff_json_path", type=str, default="")
     args_parser.add_argument("--sql_dialect", type=str, default="SQLite")
     args_parser.add_argument("--output_log_path", type=str, default="SQLite")

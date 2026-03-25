@@ -1,0 +1,161 @@
+# NL2SQL_AGENT Configuration File
+# This file controls model selection, retry behavior, and agent ablation settings
+
+## ============================================================================
+## AGENT ABLATION CONFIGURATION
+## Enable/Disable individual agents for ablation studies
+## ============================================================================
+agents:
+  schema_extractor:
+    enabled: true
+    description: "Extracts database schema using RAG and embeddings"
+
+  query_decomposer:
+    enabled: true
+    description: "Decomposes queries into execution plans and evidence mapping"
+    # NOTE: No conditional skipping - always runs when enabled
+
+  sql_generator:
+    enabled: true
+    description: "Generates SQL queries from natural language"
+
+  validator:
+    enabled: true
+    description: "Executes and validates SQL queries"
+    validation_levels:
+      structural: true   # SQL syntax and structure
+      schema: true       # Tables/columns exist
+      semantic: true     # Query matches question
+      result: true       # Output sanity checks
+
+## ============================================================================
+## MODEL CONFIGURATION
+## primary_model_type: "openai" or "ollama"
+## ============================================================================
+primary_model_type: "ollama"  # Changed to use Colab Ollama server
+
+# OpenAI Configuration
+openai:
+  # Model for SQLGenerator (primary)
+  sql_generator_model: "gpt-4o"
+  # Model for QueryDecomposer
+  query_decomposer_model: "gpt-4o"
+  # Fallback model (used after first retry)
+  fallback_model: "gpt-4o"
+  temperature: 0
+  # Optional: specify API key here or use environment variable OPENAI_API_KEY
+  # api_key: "your-api-key-here"
+
+# Ollama Configuration (for local fine-tuned models)
+ollama:
+  # Base URL for Ollama API
+  # - Local: "http://localhost:11434"
+  # - Colab (ngrok): "https://your-ngrok-url.ngrok.io"
+  base_url: "https://my-cesma.ngrok.io"
+
+  # Model for SQLGenerator
+  sql_generator_model: "llama3.1:8b"
+
+  # Model for QueryDecomposer
+  query_decomposer_model: "llama3.1:8b"
+
+  # Model for Formatter
+  formatter_model: "llama3.1:8b"
+
+  # Temperature
+  temperature: 0
+
+# Retry Configuration
+retry:
+  max_retries: 3  # Maximum number of regeneration attempts (total attempts = initial + max_retries)
+
+  # Fallback behavior
+  enable_fallback: false  # Set to false to disable fallback to OpenAI (use only SLM)
+  fallback_after_retry: 3  # Switch to fallback model starting at this retry number (if enabled)
+  # Example with max_retries=3, fallback_after_retry=3:
+  #   Attempt 0 (initial): SLM
+  #   Attempt 1 (retry 1): SLM
+  #   Attempt 2 (retry 2): SLM
+  #   Attempt 3 (retry 3): LLM (fallback triggered at regenerate_count=3)
+  # Total: 4 attempts (3 SLM + 1 LLM)
+
+# Feature Flags
+features:
+  enable_debug_output: true  # Print debug messages during execution
+  log_queries: true  # Log all generated queries
+  log_file: "sql_agent_logs.txt"
+
+## ============================================================================
+## EVALUATION CONFIGURATION
+## ============================================================================
+evaluation:
+  # Query timeout in seconds (prevents hanging queries)
+  default_query_timeout: 120.0  # 2 minutes per query
+
+  # Latency tracking
+  enable_latency_tracking: true  # Track p50, p95, p99 latency statistics
+  save_latency_details: true  # Save per-query latency to JSON files
+
+  # Evaluation metrics
+  metrics:
+    ex:  # Execution Accuracy
+      enabled: true
+      description: "Measures if predicted SQL returns same results as ground truth"
+
+    ves:  # Valid Efficiency Score
+      enabled: true
+      description: "Measures correctness and query efficiency"
+      iterate_num: 10  # Number of timing iterations for VES
+
+  # Output directory (all evaluation results saved here)
+  output_dir: "evaluation/output"
+
+## ============================================================================
+## ABLATION STUDY GUIDE
+## ============================================================================
+#
+# To run ablation studies, disable specific agents:
+#
+# Example 1: Test without query decomposition
+#   agents:
+#     query_decomposer:
+#       enabled: false
+#
+# Example 2: Test without RAG schema extraction
+#   agents:
+#     schema_extractor:
+#       enabled: false
+#
+# Example 3: Test with minimal validation
+#   agents:
+#     validator:
+#       validation_levels:
+#         structural: true
+#         schema: false
+#         semantic: false
+#         result: false
+#
+## ============================================================================
+## FALLBACK CONFIGURATION GUIDE
+## ============================================================================
+#
+# Control whether to fallback from SLM (llama3.1:8b) to LLM (gpt-4o):
+#
+# Scenario 1: Use only SLM (no fallback to GPT-4o)
+#   retry:
+#     enable_fallback: false
+#     # Agent will retry with llama3.1:8b only, no GPT-4o fallback
+#
+# Scenario 2: Enable fallback to GPT-4o after N retries (default)
+#   retry:
+#     enable_fallback: true
+#     fallback_after_retry: 3
+#     # After 3 retries with llama3.1:8b, fallback to gpt-4o
+#
+# Scenario 3: Use GPT-4o from the start
+#   primary_model_type: "openai"
+#   # No fallback needed - always uses GPT-4o
+#
+# NOTE: This allows comparing SLM-only vs SLM-with-LLM-fallback performance
+#
+## ============================================================================

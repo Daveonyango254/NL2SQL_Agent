@@ -19,10 +19,10 @@ Your output MUST be in this exact format:
 
 EXECUTION PLAN:
 1. [First step - e.g., "Identify the main table containing X data"]
-2. [Second step - e.g., "Join with Y table using Z key"]
-3. [Third step - e.g., "Filter rows where condition A is met"]
-4. [Fourth step - e.g., "Aggregate/Group results by B"]
-5. [Fifth step - e.g., "Sort and limit results"]
+2. [Second step - e.g., "Join with Y table using Z key" IF needed]
+3. [Third step - e.g., "Filter rows where condition A is met" IF needed]
+4. [Fourth step - e.g., "Aggregate/Group results by B" IF needed]
+5. [Fifth step - e.g., "Sort and limit results" IF needed]
 
 EVIDENCE MAPPING:
 - [Natural language term] -> [Database column/table/value]

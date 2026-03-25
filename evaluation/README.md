@@ -40,6 +40,9 @@ python evaluation/run_full_pipeline.py --use_langsmith --experiment_name my_expe
 
 # Custom configuration
 python evaluation/run_full_pipeline.py --limit 50 --num_cpus 8 --skip_ves
+
+# Custom configuration (per Database)
+Run: python evaluation/run_full_pipeline.py --queries_per_db 10 --experiment_name baseline_eval  
 ```
 
 ### Generate Predictions Only
@@ -78,14 +81,14 @@ Measures whether predicted SQL returns the same results as ground truth.
 
 Measures both correctness and query efficiency.
 
-| Speed Ratio | Score |
-|-------------|-------|
-| 2x+ faster | 1.25 |
-| 1-2x faster | 1.00 |
-| 0.5-1x speed | 0.75 |
-| 0.25-0.5x speed | 0.50 |
-| < 0.25x speed | 0.25 |
-| Incorrect/Error | 0.00 |
+| Speed Ratio     | Score |
+| --------------- | ----- |
+| 2x+ faster      | 1.25  |
+| 1-2x faster     | 1.00  |
+| 0.5-1x speed    | 0.75  |
+| 0.25-0.5x speed | 0.50  |
+| < 0.25x speed   | 0.25  |
+| Incorrect/Error | 0.00  |
 
 ## Configuration
 

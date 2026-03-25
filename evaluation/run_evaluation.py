@@ -13,7 +13,7 @@ from typing import Dict, Optional
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from evaluation.config import BIRD_DB_PATH, BASE_DIR, OUTPUT_DIR
+from evaluation.config import BIRD_DB_PATH, BASE_DIR, OUTPUT_DIR, DEFAULT_QUERY_TIMEOUT
 from evaluation.logger import setup_logger
 
 # Import evaluators (consolidated modules)
@@ -101,7 +101,7 @@ def run_full_evaluation(
     diff_json_path: str,
     db_root_path: str = None,
     num_cpus: int = 1,
-    meta_time_out: float = 30.0,
+    meta_time_out: float = DEFAULT_QUERY_TIMEOUT,
     iterate_num: int = 10,
     sql_dialect: str = "SQLite",
     output_dir: str = None,
@@ -155,6 +155,7 @@ def run_full_evaluation(
     logger.info(f"Database Root: {db_root_path}")
     logger.info(f"SQL Dialect: {sql_dialect}")
     logger.info(f"CPUs: {num_cpus}")
+    logger.info(f"Timeout: {meta_time_out}s per query")
     logger.info(f"Metrics: {', '.join([m for m, run in [('EX', run_ex), ('VES', run_ves)] if run])}")
     logger.info("="*80)
 
@@ -249,12 +250,34 @@ def run_full_evaluation(
         print(f"  Moderate:    {results['ex']['moderate_acc']:>6.2f}%")
         print(f"  Challenging: {results['ex']['challenging_acc']:>6.2f}%")
 
+        # Print EX latency summary
+        if 'latency_stats' in results['ex']:
+            ex_latency = results['ex']['latency_stats']
+            print(f"\n[EX] Latency Statistics:")
+            print(f"  p50 (median): {ex_latency['p50_ms']:>8,.1f} ms")
+            print(f"  p95:          {ex_latency['p95_ms']:>8,.1f} ms")
+            print(f"  p99:          {ex_latency['p99_ms']:>8,.1f} ms")
+            print(f"  Mean:         {ex_latency['mean_ms']:>8,.1f} ms")
+            if ex_latency['timeout_count'] > 0:
+                print(f"  Timeouts:     {ex_latency['timeout_count']:>5} / {ex_latency['total_queries']} ({ex_latency['timeout_percentage']:.2f}%)")
+
     if run_ves:
         print(f"\n[VES] Valid Efficiency Score:")
         print(f"  Overall:     {results['ves']['overall_ves']:>6.2f}")
         print(f"  Simple:      {results['ves']['simple_ves']:>6.2f}")
         print(f"  Moderate:    {results['ves']['moderate_ves']:>6.2f}")
         print(f"  Challenging: {results['ves']['challenging_ves']:>6.2f}")
+
+        # Print VES latency summary
+        if 'latency_stats' in results['ves']:
+            ves_latency = results['ves']['latency_stats']
+            print(f"\n[VES] Latency Statistics:")
+            print(f"  p50 (median): {ves_latency['p50_ms']:>8,.1f} ms")
+            print(f"  p95:          {ves_latency['p95_ms']:>8,.1f} ms")
+            print(f"  p99:          {ves_latency['p99_ms']:>8,.1f} ms")
+            print(f"  Mean:         {ves_latency['mean_ms']:>8,.1f} ms")
+            if ves_latency['timeout_count'] > 0:
+                print(f"  Timeouts:     {ves_latency['timeout_count']:>5} / {ves_latency['total_queries']} ({ves_latency['timeout_percentage']:.2f}%)")
 
     print(f"\n[FILE] Results: {results_file}")
     print("="*80)
@@ -303,8 +326,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--meta_time_out",
         type=float,
-        default=30.0,
-        help="Timeout per query in seconds (default: 30.0)"
+        default=DEFAULT_QUERY_TIMEOUT,
+        help=f"Timeout per query in seconds (default: {DEFAULT_QUERY_TIMEOUT}s)"
     )
     parser.add_argument(
         "--iterate_num",

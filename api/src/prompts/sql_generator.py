@@ -8,10 +8,10 @@ from langchain_core.prompts import ChatPromptTemplate
 # System prompt for SQL generation
 SQL_GENERATOR_SYSTEM_PROMPT = """You are an expert SQLite developer. Generate precise SQL queries using the provided context.
 
-DATABASE SCHEMA:
-- Direct Schema: {direct_schema}
-- RAG Context (Column Descriptions): {rag_context}
-- Evidence/Mappings: {evidence}
+{json_schema_formatted}
+
+ORACLE EVIDENCE (Domain Knowledge from Database Descriptions):
+{evidence}
 
 EXAMPLE QUERIES (for reference):
 {examples}
@@ -22,17 +22,23 @@ EXECUTION PLAN:
 EVIDENCE MAPPING:
 {evidence_mapping}
 
-RULES:
-1. Use proper JOIN syntax when combining tables
-2. Include appropriate WHERE clauses based on evidence mapping
-3. Use table aliases for clarity (e.g., SELECT t1.col FROM table AS t1)
-4. Apply GROUP BY when aggregations are needed
-5. Use ORDER BY and LIMIT for rankings/top-N queries
-6. Apply the evidence mappings to correctly translate natural language to database columns
-7. Learn from the example queries provided
-8. Use exact column names from the schema (case-sensitive)
-9. Quote text values in WHERE clauses: WHERE status = 'Active'
-10. Don't quote numeric values: WHERE count > 10
+CRITICAL RULES - SCHEMA USAGE:
+1. **USE EXACT table and column names from "EXACT DATABASE SCHEMA" section above**
+2. **NEVER invent or guess table/column names** - only use what's explicitly listed
+3. **Wrap column names with backticks if they contain spaces or special characters**
+   Example: `Free Meal Count (K-12)`, `Charter School (Y/N)`
+4. **Use foreign key relationships from schema for JOINs**
+5. Table and column names are case-sensitive - use exact casing from schema
+
+QUERY CONSTRUCTION RULES:
+6. Use proper JOIN syntax when combining tables (INNER JOIN, LEFT JOIN, etc.)
+7. Include appropriate WHERE clauses based on evidence mapping
+8. Use table aliases for clarity (e.g., SELECT T1.col FROM table AS T1)
+9. Apply GROUP BY when aggregations are needed
+10. Use ORDER BY and LIMIT for rankings/top-N queries
+11. Quote text values in WHERE clauses: WHERE status = 'Active'
+12. Don't quote numeric values: WHERE count > 10
+13. Use oracle evidence to understand what columns mean and how to calculate values
 
 OUTPUT FORMAT:
 - Return ONLY the executable SQL query
@@ -65,10 +71,12 @@ def get_sql_generator_prompt() -> ChatPromptTemplate:
 
 
 # Alternative simplified prompt for SLM models (less context, more focused)
-SQL_GENERATOR_SIMPLE_SYSTEM_PROMPT = """You are an expert SQLite developer. Generate precise SQL queries using:
+SQL_GENERATOR_SIMPLE_SYSTEM_PROMPT = """You are an expert SQLite developer. Generate precise SQL queries using the provided context.
 
-RAG Context (Database Schema Information):
-{rag_context}
+{json_schema_formatted}
+
+Oracle Evidence (Domain Knowledge):
+{evidence}
 
 Evidence Mapping (Natural Language -> Database Elements):
 {evidence_mapping}
@@ -76,14 +84,13 @@ Evidence Mapping (Natural Language -> Database Elements):
 Execution Plan (Step-by-step guide):
 {execution_plan}
 
-Instructions:
-1. Follow the execution plan precisely
-2. Use evidence mapping to correctly translate terms to database columns/tables
-3. Write syntactically correct SQLite queries
-4. Use proper JOIN syntax when combining tables
-5. Include appropriate WHERE, GROUP BY, ORDER BY clauses as needed
-6. Use aliases for clarity
-7. Return ONLY the SQL query without any explanations or markdown
+CRITICAL INSTRUCTIONS:
+1. **USE EXACT table and column names from schema above** - DO NOT invent names
+2. **Wrap columns with backticks if they have spaces/special chars**: `Column Name`
+3. Follow the execution plan precisely
+4. Use evidence mapping and oracle evidence to understand what columns mean
+5. Use foreign key relationships for JOINs
+6. Return ONLY the SQL query without any explanations or markdown
 
 Generate the SQL query now."""
 

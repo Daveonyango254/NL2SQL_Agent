@@ -3,8 +3,10 @@
 
 # Python
 .venv
-__pycache__
+__pycache__/
+*/__pycache__/
 *.pyc
+*.pyo
 .ipynb_checkpoints
 
 # Environment
@@ -22,3 +24,6 @@ embeddings/
 
 # Data files (large, download separately)
 data/
+
+# Documentation (Docs directory)
+Docs/

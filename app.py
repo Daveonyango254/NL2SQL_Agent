@@ -3,8 +3,10 @@ import sys
 from pathlib import Path
 import json
 import yaml
-from SQL_Agent import run_sql_agent, discover_databases, get_database_path, CONFIG
-# from SQL_Agent_SLM import run_sql_agent, discover_databases, get_database_path   # For SLM version
+# Use new modular structure
+from SQL_Agent_2 import execute_query as run_sql_agent, CONFIG
+from api.src.utils.database import discover_databases, get_database_path
+# Old import: from SQL_Agent import run_sql_agent, discover_databases, get_database_path, CONFIG
 
 # Page configuration
 st.set_page_config(
