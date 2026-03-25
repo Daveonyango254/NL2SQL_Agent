@@ -181,7 +181,11 @@ def create_executor_validator_node(config: dict):
 
         if not db_path:
             state["sql_results"] = "Query generated but not executed (no database connection)"
-            state["validation_status"] = True
+            state["validation_status"] = False  # ✅ FIX: Should fail validation if no db_path
+            state["error_count"] = state.get("error_count", 0) + 1
+            state["messages"].append(
+                AIMessage(content="Validation failed: No database path available")
+            )
             return state
 
         # Execute and validate
@@ -207,10 +211,12 @@ def create_executor_validator_node(config: dict):
                     content=f"Query executed: {row_count} rows. Validation: {validation_summary}")
             )
         else:
+            # ✅ FIX: Increment regenerate_count when validation fails
+            state["regenerate_count"] = state.get("regenerate_count", 0) + 1
             state["error_count"] = state.get("error_count", 0) + 1
             error_msgs = "; ".join([r.message for r in validation_results if r.level.value == "error"])
             state["messages"].append(
-                AIMessage(content=f"Validation failed: {error_msgs}")
+                AIMessage(content=f"Validation failed (attempt {state['regenerate_count']}): {error_msgs}")
             )
 
         return state

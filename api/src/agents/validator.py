@@ -124,14 +124,98 @@ class SQLValidator:
     def validate_schema(self, sql: str) -> List[ValidationResult]:
         """Validate tables and columns exist in database"""
         results = []
-        # Simplified - full implementation would check table/column names
-        # against actual schema
+
+        if not self.db_path:
+            return results
+
+        try:
+            # Get actual schema from database
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Get all table names
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            valid_tables = {row[0].lower() for row in cursor.fetchall()}
+
+            # Extract table names from SQL (simple regex-based extraction)
+            import re
+            sql_upper = sql.upper()
+
+            # Extract FROM and JOIN table references
+            from_pattern = r'FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)'
+            join_pattern = r'JOIN\s+([a-zA-Z_][a-zA-Z0-9_]*)'
+
+            tables_in_sql = set()
+            tables_in_sql.update(re.findall(from_pattern, sql, re.IGNORECASE))
+            tables_in_sql.update(re.findall(join_pattern, sql, re.IGNORECASE))
+
+            # Check if tables exist
+            for table in tables_in_sql:
+                if table.lower() not in valid_tables:
+                    results.append(ValidationResult(
+                        level=ValidationLevel.ERROR,
+                        check_name="table_exists",
+                        message=f"Table '{table}' does not exist in database",
+                        details={"table": table, "valid_tables": list(valid_tables)}
+                    ))
+
+            conn.close()
+
+        except Exception as e:
+            # Don't fail validation on schema check errors, just log
+            results.append(ValidationResult(
+                level=ValidationLevel.WARNING,
+                check_name="schema_check_error",
+                message=f"Could not validate schema: {str(e)}"
+            ))
+
         return results
 
     def validate_semantic(self, sql: str, question: str, schema_context: Dict = None) -> List[ValidationResult]:
         """Validate query semantically matches the question"""
         results = []
-        # Simplified - full implementation would do deeper semantic checks
+        question_lower = question.lower()
+        sql_upper = sql.upper()
+
+        # Check 1: Count questions should return single aggregate value
+        if any(word in question_lower for word in ['how many', 'count', 'number of']):
+            if 'COUNT' not in sql_upper and 'SUM' not in sql_upper:
+                results.append(ValidationResult(
+                    level=ValidationLevel.WARNING,
+                    check_name="count_query_missing_aggregate",
+                    message="Question asks for count but SQL missing COUNT/SUM aggregate"
+                ))
+
+        # Check 2: Average/mean questions should use AVG
+        if any(word in question_lower for word in ['average', 'mean', 'avg']):
+            if 'AVG' not in sql_upper:
+                results.append(ValidationResult(
+                    level=ValidationLevel.WARNING,
+                    check_name="average_query_missing_avg",
+                    message="Question asks for average but SQL missing AVG function"
+                ))
+
+        # Check 3: List/show questions shouldn't have COUNT (unless asking for count)
+        if any(word in question_lower for word in ['list', 'show', 'display', 'what are']):
+            if 'count' not in question_lower and 'COUNT(*)' in sql_upper:
+                results.append(ValidationResult(
+                    level=ValidationLevel.WARNING,
+                    check_name="list_query_has_count",
+                    message="Question asks to list items but SQL uses COUNT(*)"
+                ))
+
+        # Check 4: Top N questions should have LIMIT
+        import re
+        top_match = re.search(r'top\s+(\d+)', question_lower)
+        if top_match:
+            limit_match = re.search(r'LIMIT\s+(\d+)', sql_upper)
+            if not limit_match:
+                results.append(ValidationResult(
+                    level=ValidationLevel.WARNING,
+                    check_name="top_n_missing_limit",
+                    message=f"Question asks for top {top_match.group(1)} but SQL missing LIMIT clause"
+                ))
+
         return results
 
     def validate_results(self, sql: str, question: str, results: Any) -> List[ValidationResult]:
