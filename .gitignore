@@ -27,3 +27,8 @@ data/
 
 # Documentation (Docs directory)
 Docs/
+
+# Markdown files (except READMEs)
+*.md
+!README.md
+!**/README.md

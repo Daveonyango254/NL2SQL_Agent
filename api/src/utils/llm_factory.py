@@ -126,6 +126,7 @@ class LLMConfig:
 
     def __init__(self, config: Dict):
         self.config = config
+        self._embeddings_cache = None  # Cache embeddings model to avoid reloading
 
     def get_decomposer_llm(self, regenerate_count: int = 0):
         """Get LLM for query decomposition"""
@@ -158,16 +159,27 @@ class LLMConfig:
         return create_llm(model_type="sql_generator", config=self.config, use_fallback=False)
 
     def get_embeddings(self):
-        """Get embeddings model - prefer local HuggingFace for speed"""
+        """Get embeddings model - prefer local HuggingFace for speed (cached after first load)"""
+        # Return cached embeddings if already loaded
+        if self._embeddings_cache is not None:
+            return self._embeddings_cache
+
         if HUGGINGFACE_AVAILABLE:
             try:
-                return HuggingFaceEmbeddings(
+                # Suppress HuggingFace progress bars to avoid conflicts with tqdm
+                import os
+                os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+
+                self._embeddings_cache = HuggingFaceEmbeddings(
                     model_name="sentence-transformers/all-MiniLM-L6-v2",
                     model_kwargs={'device': 'cpu'},
-                    encode_kwargs={'normalize_embeddings': True}
+                    encode_kwargs={'normalize_embeddings': True},
+                    show_progress=False
                 )
+                return self._embeddings_cache
             except Exception as e:
                 if self.config['features'].get('enable_debug_output'):
                     print(f"HuggingFace embeddings failed: {e}. Using OpenAI.")
 
-        return OpenAIEmbeddings()
+        self._embeddings_cache = OpenAIEmbeddings()
+        return self._embeddings_cache

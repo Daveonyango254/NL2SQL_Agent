@@ -67,17 +67,18 @@ ollama:
 
 # Retry Configuration
 retry:
-  max_retries: 3  # Maximum number of regeneration attempts (total attempts = initial + max_retries)
+  max_retries: 2  # Maximum number of regeneration attempts (total attempts = initial + max_retries)
 
   # Fallback behavior
-  enable_fallback: false  # Set to false to disable fallback to OpenAI (use only SLM)
-  fallback_after_retry: 3  # Switch to fallback model starting at this retry number (if enabled)
-  # Example with max_retries=3, fallback_after_retry=3:
-  #   Attempt 0 (initial): SLM
-  #   Attempt 1 (retry 1): SLM
-  #   Attempt 2 (retry 2): SLM
-  #   Attempt 3 (retry 3): LLM (fallback triggered at regenerate_count=3)
-  # Total: 4 attempts (3 SLM + 1 LLM)
+  enable_fallback: true  # Set to false to disable fallback to OpenAI (use only SLM)
+  fallback_after_retry: 1  # Switch to fallback model starting at this retry number (if enabled)
+  # Example with max_retries=2, fallback_after_retry=1:
+  #   Attempt 0 (initial): SLM (Ollama)
+  #   Attempt 1 (retry 1): LLM (OpenAI) - fallback triggered at regenerate_count=1
+  #   Attempt 2 (retry 2): LLM (OpenAI)
+  # Total: 3 attempts (1 Ollama + 2 OpenAI)
+  #
+  # If enable_fallback: false, all 3 attempts use Ollama
 
 # Feature Flags
 features:

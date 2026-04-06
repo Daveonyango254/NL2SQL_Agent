@@ -106,10 +106,23 @@ CONFIG = load_config()
 # MAIN FUNCTION
 # =============================================================================
 
+# Global cache for agent and LLM config to avoid reloading embeddings
+_AGENT_CACHE = None
+_LLM_CONFIG_CACHE = None
+
 
 def initialize_agent():
     """Initialize the SQL agent graph with all dependencies"""
-    llm_config = LLMConfig(CONFIG)
+    global _AGENT_CACHE, _LLM_CONFIG_CACHE
+
+    # Return cached agent if already initialized
+    if _AGENT_CACHE is not None:
+        return _AGENT_CACHE
+
+    # Create or reuse LLM config (with embeddings cache)
+    if _LLM_CONFIG_CACHE is None:
+        _LLM_CONFIG_CACHE = LLMConfig(CONFIG)
+    llm_config = _LLM_CONFIG_CACHE
 
     # Format functions
     format_funcs = {
@@ -120,7 +133,7 @@ def initialize_agent():
     }
 
     # Build the graph
-    graph = build_sql_agent_graph(
+    _AGENT_CACHE = build_sql_agent_graph(
         get_database_path_func=get_database_path,
         get_csv_paths_func=get_database_csv_paths,
         load_examples_func=load_database_examples,
@@ -137,7 +150,7 @@ def initialize_agent():
         config=CONFIG
     )
 
-    return graph
+    return _AGENT_CACHE
 
 
 def execute_query(

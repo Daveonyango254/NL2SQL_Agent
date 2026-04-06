@@ -315,7 +315,8 @@ def run_ex_evaluation(
             "total": count_lists[3]
         },
         "output_file": str(output_log_path),
-        "latency_stats": latency_tracker.get_summary()
+        "latency_stats": latency_tracker.get_summary(),
+        "per_question_results": sorted_results  # Required for database metrics grouping
     }
 
 

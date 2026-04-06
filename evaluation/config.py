@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).parent.parent
 # BIRD dataset paths
 BIRD_DB_PATH = BASE_DIR / "data" / "bird" / "dev_databases"
 BIRD_DEV_JSON = BASE_DIR / "data" / "bird" / \
-    "sample_dev(testing).json"   # or "sample_dev(testing).json" for smaller set & dev,json for full set
+    "dev.json"   # or "sample_dev(testing).json" for smaller set & dev.json for full set
 # Uncoment for errors evaluation
 # BIRD_DEV_JSON = BASE_DIR / "evaluation" / "output" / "test1" / \
 # "pipeline_20251121_125835_predictions_errors.json"
