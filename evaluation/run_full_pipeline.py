@@ -105,7 +105,8 @@ def run_pipeline(
     use_langsmith: bool = False,
     experiment_name: str = None,
     output_mode: str = "sql_only",
-    enable_agent_logging: bool = False
+    enable_agent_logging: bool = False,
+    max_workers: int = 1
 ):
     """
     Run complete evaluation pipeline
@@ -184,12 +185,22 @@ def run_pipeline(
         enable_agent_logging=enable_agent_logging
     )
 
-    predictions = generator.generate_predictions(
-        dev_file=dev_file,
-        output_file=prediction_file.name,
-        limit=limit,
-        skip=skip
-    )
+    # Use parallel or sequential processing based on max_workers
+    if max_workers > 1:
+        predictions = generator.generate_predictions_parallel(
+            dev_file=dev_file,
+            output_file=prediction_file.name,
+            limit=limit,
+            skip=skip,
+            max_workers=max_workers
+        )
+    else:
+        predictions = generator.generate_predictions(
+            dev_file=dev_file,
+            output_file=prediction_file.name,
+            limit=limit,
+            skip=skip
+        )
 
     logger.info(f"[OK] Predictions generated: {prediction_file}")
 
@@ -427,6 +438,14 @@ Examples:
         help="Enable detailed agent execution logging for behavior analysis"
     )
 
+    # Performance optimization
+    parser.add_argument(
+        "--max_workers",
+        type=int,
+        default=1,
+        help="Number of parallel workers for prediction generation (default: 1, recommended: 2-4)"
+    )
+
     args = parser.parse_args()
 
     # Validate
@@ -451,7 +470,8 @@ Examples:
         use_langsmith=args.use_langsmith,
         experiment_name=args.experiment_name,
         output_mode=args.output_mode,
-        enable_agent_logging=args.enable_agent_logging
+        enable_agent_logging=args.enable_agent_logging,
+        max_workers=args.max_workers
     )
 
     print("\n[DONE] Pipeline complete! Check output directory for results.")

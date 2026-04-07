@@ -21,6 +21,8 @@ import time
 from datetime import datetime
 from typing import Dict, List
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 
 
@@ -396,6 +398,164 @@ class PredictionGenerator:
                 json.dump(errors, f, indent=2, ensure_ascii=False)
             logger.warning(
                 f"\n{len(errors)} errors occurred. See: {error_file}")
+
+        # Print summary
+        success_count = len([p for p in predictions.values() if p])
+        logger.info("\n" + "="*80)
+        logger.info("PREDICTION GENERATION COMPLETE")
+        logger.info("="*80)
+        logger.info(f"Total questions: {total_questions}")
+        logger.info(f"Successful:      {success_count}")
+        logger.info(f"Failed:          {len(errors)}")
+        logger.info(f"\nPredictions saved to: {output_file}")
+        logger.info(f"Metadata saved to: {metadata_file}")
+
+        # Save and display latency statistics
+        latency_file = output_file.parent / f"{output_file.stem}_latency.json"
+        self.latency_tracker.save_to_file(latency_file)
+        logger.info(f"Latency stats saved to: {latency_file}")
+
+        # Print latency summary
+        self.latency_tracker.print_summary()
+
+        # Save agent execution logs if enabled
+        if self.enable_agent_logging and self.agent_logger:
+            self.agent_logger.save_summary()
+            self.agent_logger.print_summary()
+
+        logger.info("="*80)
+
+        return predictions
+
+    def generate_predictions_parallel(
+        self,
+        dev_file: str,
+        output_file: str = None,
+        limit: int = None,
+        skip: int = 0,
+        max_workers: int = 2
+    ) -> Dict[int, str]:
+        """
+        Generate predictions in parallel using ThreadPoolExecutor
+
+        Args:
+            dev_file: Path to dev.json file
+            output_file: Path to save predictions (in output directory)
+            limit: Optional limit on number of questions
+            skip: Number of questions to skip (for resuming)
+            max_workers: Number of parallel workers (default: 2)
+
+        Returns:
+            Dictionary mapping question_id to predicted SQL
+        """
+        logger.info("="*80)
+        logger.info("SQL Prediction Generation (PARALLEL)")
+        logger.info("="*80)
+        logger.info(f"Dev file: {dev_file}")
+        logger.info(f"Output mode: {self.output_mode}")
+        logger.info(f"Timeout: {self.timeout}s per query")
+        logger.info(f"Parallel workers: {max_workers}")
+        logger.info(f"LangSmith: {self.use_langsmith}")
+        logger.info(f"Model: {CONFIG.get('primary_model_type', 'openai')}")
+        logger.info("="*80)
+
+        # Load dev data
+        with open(dev_file, 'r', encoding='utf-8') as f:
+            dev_data = json.load(f)
+
+        # Apply limit and skip
+        if skip > 0:
+            dev_data = dev_data[skip:]
+            logger.info(f"Skipped first {skip} questions")
+
+        if limit:
+            dev_data = dev_data[:limit]
+            logger.info(f"Limited to {limit} questions")
+
+        total_questions = len(dev_data)
+        logger.info(f"\nProcessing {total_questions} questions with {max_workers} workers...")
+
+        # Thread-safe collections
+        predictions = {}
+        prediction_metadata = []
+        errors = []
+        lock = threading.Lock()
+
+        # Submit all tasks to thread pool
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Create futures dictionary
+            future_to_item = {
+                executor.submit(
+                    self.generate_single_prediction,
+                    item['question'],
+                    item['db_id'],
+                    item['question_id'],
+                    item.get('evidence', '')
+                ): item for item in dev_data
+            }
+
+            # Process completed futures with progress bar
+            with tqdm(total=total_questions, desc="Generating predictions",
+                     file=sys.stderr, ncols=100, ascii=True) as pbar:
+                for future in as_completed(future_to_item):
+                    try:
+                        result = future.result()
+
+                        # Thread-safe result collection
+                        with lock:
+                            prediction_metadata.append(result)
+
+                            if result['success']:
+                                predictions[result['question_id']] = result['predicted_sql']
+                            else:
+                                errors.append(result)
+                                predictions[result['question_id']] = ""
+
+                        pbar.update(1)
+
+                    except Exception as e:
+                        item = future_to_item[future]
+                        logger.error(f"Unexpected error processing question {item['question_id']}: {e}")
+                        with lock:
+                            errors.append({
+                                "question_id": item['question_id'],
+                                "db_id": item['db_id'],
+                                "question": item['question'],
+                                "predicted_sql": "",
+                                "model_used": "UNKNOWN",
+                                "retry_count": 0,
+                                "success": False,
+                                "error": str(e),
+                                "latency_ms": 0
+                            })
+                        pbar.update(1)
+
+        # Sort metadata by question_id to maintain order
+        prediction_metadata.sort(key=lambda x: x['question_id'])
+
+        # Save predictions to output directory
+        if output_file is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = OUTPUT_DIR / f"predictions_{timestamp}.json"
+        else:
+            output_file = OUTPUT_DIR / Path(output_file).name
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(predictions, f, indent=2, ensure_ascii=False)
+
+        # Save full prediction metadata
+        metadata_file = output_file.parent / f"{output_file.stem}_metadata.json"
+        with open(metadata_file, 'w', encoding='utf-8') as f:
+            json.dump(prediction_metadata, f, indent=2, ensure_ascii=False)
+
+        # Save error log if there were errors
+        if errors:
+            error_file = output_file.parent / f"{output_file.stem}_errors.json"
+            with open(error_file, 'w', encoding='utf-8') as f:
+                json.dump(errors, f, indent=2, ensure_ascii=False)
+            logger.warning(f"\n{len(errors)} errors occurred. See: {error_file}")
 
         # Print summary
         success_count = len([p for p in predictions.values() if p])

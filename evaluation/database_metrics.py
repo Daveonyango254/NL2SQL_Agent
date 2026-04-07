@@ -123,12 +123,15 @@ def calculate_database_metrics(db_groups: Dict[str, List[Dict]]) -> Dict[str, Di
             if 'ex_result' in query and query['ex_result'].get('res') == 1:
                 metrics['ex_correct'] += 1
 
-            # VES scores
+            # VES scores (include 0 for failures - matches evaluator logic)
             if 'ves_result' in query:
                 time_ratio = query['ves_result'].get('time_ratio', 0)
-                if time_ratio > 0:
-                    ves_score = np.sqrt(time_ratio) * 100
-                    metrics['ves_scores'].append(ves_score)
+                # Calculate VES score (0 for failures/timeouts)
+                ves_score = np.sqrt(time_ratio) * 100 if time_ratio > 0 else 0
+                metrics['ves_scores'].append(ves_score)
+            else:
+                # No VES result means it wasn't evaluated
+                metrics['ves_scores'].append(0)
 
             # Model usage (SLM vs LLM)
             if 'prediction' in query and isinstance(query['prediction'], dict):
@@ -338,12 +341,13 @@ def generate_model_comparison_table(db_groups: Dict[str, List[Dict]], output_pat
             if 'ex_result' in query and query['ex_result'].get('res') == 1:
                 target['ex_correct'] += 1
 
-            # VES
+            # VES (include 0 for failures - matches evaluator logic)
             if 'ves_result' in query:
                 time_ratio = query['ves_result'].get('time_ratio', 0)
-                if time_ratio > 0:
-                    ves_score = np.sqrt(time_ratio) * 100
-                    target['ves_scores'].append(ves_score)
+                ves_score = np.sqrt(time_ratio) * 100 if time_ratio > 0 else 0
+                target['ves_scores'].append(ves_score)
+            else:
+                target['ves_scores'].append(0)
 
             # Retries
             if 'prediction' in query and isinstance(query['prediction'], dict):

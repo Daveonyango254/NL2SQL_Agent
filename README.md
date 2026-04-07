@@ -170,6 +170,9 @@ python evaluation/run_full_pipeline.py
 # Evaluate with limit
 python evaluation/run_full_pipeline.py --limit 100
 
+# Parallel processing (2x faster with 2 workers)
+python evaluation/run_full_pipeline.py --limit 100 --max_workers 2
+
 # Run with custom experiment name
 python evaluation/run_full_pipeline.py --experiment_name my_test
 ```
