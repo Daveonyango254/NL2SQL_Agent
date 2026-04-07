@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from evaluation.logger import setup_logger
 from evaluation.config import BIRD_DEV_JSON, OUTPUT_DIR, DEFAULT_QUERY_TIMEOUT
 from evaluation.latency_tracker import LatencyTracker
-from SQL_Agent_2 import execute_query, CONFIG
+from SQL_Agent_2 import initialize_agent, CONFIG
+from api.src.graph.workflow import run_sql_agent
 from api.src.utils.sql_extractor import extract_sql_for_evaluation
 from func_timeout import func_timeout, FunctionTimedOut
 import json
@@ -71,6 +72,9 @@ class PredictionGenerator:
         self.enable_agent_logging = enable_agent_logging
         self.agent_logger = None
 
+        # Initialize agent graph once (cached for reuse)
+        self.agent_graph = initialize_agent()
+
         # Initialize LangSmith if requested
         if self.use_langsmith and LANGSMITH_AVAILABLE:
             try:
@@ -117,20 +121,20 @@ class PredictionGenerator:
         error_msg = None
 
         try:
-            # Run SQL agent with timeout
+            # Run SQL agent with timeout (returns full state dict)
             if self.enable_agent_logging and self.agent_logger:
                 # Log query start
                 self.agent_logger.start_query(question_id, db_id, question)
 
                 try:
-                    result = func_timeout(
+                    agent_state = func_timeout(
                         self.timeout,
-                        execute_query,
-                        args=(question, db_id, self.output_mode)
+                        run_sql_agent,
+                        args=(question, db_id, self.output_mode, self.agent_graph, CONFIG)
                     )
 
                     # Log query end (success)
-                    final_sql = self._extract_sql(result)
+                    final_sql = self._extract_sql(agent_state["formatted_response"])
                     self.agent_logger.end_query(success=True, final_sql=final_sql)
 
                 except Exception as e:
@@ -139,17 +143,17 @@ class PredictionGenerator:
                     raise
             else:
                 # No logging - run directly
-                result = func_timeout(
+                agent_state = func_timeout(
                     self.timeout,
-                    execute_query,
-                    args=(question, db_id, self.output_mode)
+                    run_sql_agent,
+                    args=(question, db_id, self.output_mode, self.agent_graph, CONFIG)
                 )
 
-            # Extract SQL from result (handles different output modes)
-            sql = self._extract_sql(result)
+            # Extract SQL from formatted response
+            sql = self._extract_sql(agent_state["formatted_response"])
 
-            # Extract model usage and retry count
-            model_info = self._extract_model_info(result)
+            # Extract model usage and retry count from agent state
+            model_info = self._extract_model_info(agent_state)
 
             latency_ms = (time.time() - start_time) * 1000
 
@@ -250,31 +254,41 @@ class PredictionGenerator:
         """
         return extract_sql_for_evaluation(agent_result)
 
-    def _extract_model_info(self, agent_result: str) -> Dict:
+    def _extract_model_info(self, agent_state: Dict) -> Dict:
         """
-        Extract model usage and retry count from agent result
+        Extract model usage and retry count from agent state
 
         Args:
-            agent_result: Raw result from agent (formatted response string)
+            agent_state: Full agent state dictionary from run_sql_agent
 
         Returns:
             Dictionary with model_used and retry_count
         """
+        # Get retry count directly from state
+        retry_count = agent_state.get("regenerate_count", 0)
+
+        # Determine model used based on messages
         model_used = "SLM"  # Default
-        retry_count = 0
+        messages = agent_state.get("messages", [])
 
-        # Parse the result string to find model information
-        # The agent includes messages like "SQL generated using Ollama (llama3.1:8b)"
-        if "OpenAI (gpt-4o)" in agent_result or "OpenAI (" in agent_result:
-            model_used = "LLM"
-        elif "Ollama (" in agent_result:
-            model_used = "SLM"
+        # Check messages for model information
+        for msg in messages:
+            content = str(msg.content) if hasattr(msg, 'content') else str(msg)
+            if "OpenAI (gpt-4o)" in content or "OpenAI (" in content:
+                model_used = "LLM"
+                break  # Found LLM usage, no need to continue
+            elif "fallback" in content.lower():
+                model_used = "LLM"
+                break
 
-        # Try to extract retry/regenerate information from validation messages
-        # Look for patterns like "Validation failed" which indicates a retry occurred
-        import re
-        validation_failures = agent_result.count("Validation failed")
-        retry_count = validation_failures  # Number of retries = number of validation failures
+        # Alternative: Check if fallback was triggered based on retry count and config
+        if retry_count > 0:
+            primary_type = CONFIG.get('primary_model_type', 'openai')
+            enable_fallback = CONFIG['retry'].get('enable_fallback', True)
+            fallback_after = CONFIG['retry'].get('fallback_after_retry', 1)
+
+            if enable_fallback and primary_type == 'ollama' and retry_count >= fallback_after:
+                model_used = "LLM"
 
         return {
             "model_used": model_used,

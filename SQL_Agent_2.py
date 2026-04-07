@@ -175,7 +175,7 @@ def execute_query(
     # Initialize agent graph
     graph = initialize_agent()
 
-    # Run the agent
+    # Run the agent (returns full state dict)
     result = run_sql_agent(
         query=query,
         db_id=db_id,
@@ -184,7 +184,9 @@ def execute_query(
         config=CONFIG
     )
 
-    return result
+    # For CLI usage, return just the formatted response string
+    # Evaluation scripts can access the full result dict
+    return result["formatted_response"]
 
 
 # =============================================================================

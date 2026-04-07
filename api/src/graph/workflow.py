@@ -148,7 +148,7 @@ def run_sql_agent(
     output_mode: str,
     graph,
     config: Dict
-) -> str:
+) -> Dict:
     """
     Run the SQL agent with specified configuration
 
@@ -160,7 +160,7 @@ def run_sql_agent(
         config: Configuration dictionary
 
     Returns:
-        Formatted response string
+        Complete agent state dictionary including formatted_response, regenerate_count, etc.
     """
     if not db_id:
         raise ValueError("db_id is required to identify the database")
@@ -182,4 +182,4 @@ def run_sql_agent(
     # Run the agent
     result = graph.invoke(initial_state)
 
-    return result["formatted_response"]
+    return result  # Return full state instead of just formatted_response
